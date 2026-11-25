@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#005387">
+<title>IJsselgrow B.V. – Narrowcasting</title>
+<style>
+  :root {
+    --ral5017: #005387;   /* RAL 5017 verkeersblauw – bedrijfskleur */
+    --groen: #007a29;     /* groen uit het logo */
+    --bg: #ffffff;
+    --bg2: #eef4f8;
+    --text: #1b2a38;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; cursor: none; }
+  body {
+    font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+    background: linear-gradient(135deg, var(--bg), var(--bg2));
+    color: var(--text);
+  }
+  body::after {            /* subtiel groen accent rechtsonder */
+    content: ""; position: absolute; right: -8vh; bottom: 4vh; width: 40vh; height: 40vh;
+    border-radius: 50%; background: radial-gradient(circle, rgba(0,122,41,.10), transparent 70%);
+    pointer-events: none;
+  }
+
+  /* Bovenbalk */
+  header {
+    position: absolute; top: 0; left: 0; right: 0; height: 13vh;
+    display: flex; align-items: center; gap: 2vw;
+    padding: 0 4vw; background: #fff;
+    border-bottom: 1vh solid var(--ral5017);
+  }
+  #logo { height: 10.5vh; width: auto; }
+  .merk { display: flex; flex-direction: column; line-height: 1.1; }
+  .merk strong { font-size: 5vh; color: var(--ral5017); letter-spacing: .05vh; }
+  .tijd { margin-left: auto; text-align: right; }
+  #klok { font-size: 6vh; font-weight: 700; color: var(--ral5017); line-height: 1; }
+  #datum { font-size: 2.4vh; color: #4a5b6b; margin-top: .6vh; }
+
+  /* Slides */
+  main { position: absolute; top: 13vh; bottom: 7vh; left: 0; right: 0; z-index: 1; }
+  main::before {           /* groot, vaag logo als achtergrond op elke slide */
+    content: ""; position: absolute; right: 3vw; bottom: 2vh; width: 38vh; height: 30vh;
+    background: url("logo.png") no-repeat center / contain;
+    opacity: .08; pointer-events: none; z-index: -1;
+  }
+  .slide {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    gap: 4vw; padding: 5vh 6vw;
+    opacity: 0; transition: opacity 1s ease;
+  }
+  .slide.actief { opacity: 1; }
+  .slide .tekstblok { flex: 1; min-width: 0; }
+  .slide h1 {
+    font-size: 8vh; line-height: 1.1; margin-bottom: 3vh; color: var(--ral5017);
+    padding-bottom: 2vh; border-bottom: .8vh solid var(--groen); display: inline-block;
+  }
+  .slide p  { font-size: 4.6vh; line-height: 1.35; white-space: pre-line; }
+  .slide img {
+    flex: 1; min-width: 0; max-width: 48%; max-height: 100%;
+    object-fit: contain; border-radius: 1.5vh;
+    box-shadow: 0 1vh 3vh rgba(0,40,70,.25);
+  }
+  .slide.alleen-afbeelding img { max-width: 100%; }
+  .slide.alleen-tekst { text-align: center; }
+  .slide.alleen-tekst h1 { font-size: 10vh; }
+  .slide.alleen-tekst p  { font-size: 5.2vh; }
+
+  /* Voortgangsbalk onderin */
+  footer {
+    position: absolute; bottom: 0; left: 0; right: 0; height: 7vh;
+    display: flex; align-items: center; padding: 0 4vw; z-index: 2;
+    font-size: 2.2vh; background: var(--ral5017); color: #fff;
+  }
+  footer .naam { font-weight: 600; margin-right: 2vw; }
+  #teller, #status { opacity: .8; }
+  #voortgang {
+    position: absolute; top: 0; left: 0; height: 1vh; width: 0;
+    background: var(--groen);
+  }
+  #status { margin-left: auto; }
+</style>
+</head>
+<body>
+
+<header>
+  <!-- Zet het logobestand als "logo.png" in dezelfde map als dit bestand -->
+  <img id="logo" src="logo.png" alt="IJsselgrow B.V." onerror="this.style.display='none'">
+  <div class="merk">
+    <strong>IJsselgrow B.V.</strong>
+  </div>
+  <div class="tijd">
+    <div id="klok"></div>
+    <div id="datum"></div>
+  </div>
+</header>
+
+<main id="slides"></main>
+
+<footer>
+  <div id="voortgang"></div>
+  <span class="naam">IJsselgrow B.V.</span>
+  <span id="teller"></span>
+  <span id="status"></span>
+</footer>
+
+<script>
+/* ============================================================
+   INSTELLINGEN – pas hier aan
+   ============================================================ */
+const CONFIG = {
+  // Plak hier de CSV-link van je gepubliceerde Google Sheet
+  // (Bestand → Delen → Publiceren op internet → kies tabblad + CSV).
+  // Laat leeg om de demo-inhoud te zien.
+  SHEET_CSV_URL: "",
+
+  SLIDE_SECONDEN: 12,        // hoe lang elke slide zichtbaar is
+  VERVERS_MINUTEN: 3,        // hoe vaak de sheet opnieuw wordt opgehaald
+  HERLAAD_UUR: 6,            // hele pagina herladen (voorkomt geheugenproblemen)
+  STANDAARD_TITEL: "Welkom bij IJsselgrow B.V.",
+  STANDAARD_TEKST: "Er is op dit moment geen nieuws."
+};
+
+/* Verwachte kolommen in de sheet (hoofdletters maken niet uit):
+   titel | tekst | afbeelding | startdatum | einddatum | actief
+   - datums: JJJJ-MM-DD of DD-MM-JJJJ (leeg = altijd)
+   - actief: ja / nee (leeg telt als ja)
+*/
+
+/* ============================================================
+   DEMO-INHOUD (wordt getoond zolang SHEET_CSV_URL leeg is)
+   ============================================================ */
+const DEMO_CSV = `titel,tekst,afbeelding,startdatum,einddatum,actief
+Welkom bij IJsselgrow!,"Fijn dat je er bent.
+Samen zorgen we voor verse komkommers, elke dag opnieuw.",,,,ja
+Veiligheid eerst,"Draag altijd je veiligheidsschoenen in de kas en pakhuis.
+Meld onveilige situaties direct bij je leidinggevende.",,,,ja
+Hygiëne in de kas,"Was je handen voordat je de kas betreedt.
+Gebruik de desinfectiebaden bij de ingang.",,,,ja
+Teamlunch vrijdag,"Om 12:30 uur in de kantine. Meld je aan bij de receptie.",,,,ja
+Oude aankondiging,"Deze slide is verlopen en wordt niet getoond.",,2020-01-01,2020-01-31,ja
+Uitgeschakeld,"Deze slide staat op nee en wordt niet getoond.",,,,nee`;
+
+/* ============================================================
+   CSV-PARSER (kan met aanhalingstekens en regeleinden in cellen)
+   ============================================================ */
+function parseCSV(tekst) {
+  const rijen = [];
+  let rij = [], cel = "", inAanhaling = false;
+  for (let i = 0; i < tekst.length; i++) {
+    const c = tekst[i], n = tekst[i + 1];
+    if (inAanhaling) {
+      if (c === '"' && n === '"') { cel += '"'; i++; }
+      else if (c === '"') inAanhaling = false;
+      else cel += c;
+    } else {
+      if (c === '"') inAanhaling = true;
+      else if (c === ",") { rij.push(cel); cel = ""; }
+      else if (c === "\n" || c === "\r") {
+        if (c === "\r" && n === "\n") i++;
+        rij.push(cel); cel = "";
+        if (rij.some(x => x.trim() !== "")) rijen.push(rij);
+        rij = [];
+      } else cel += c;
+    }
+  }
+  rij.push(cel);
+  if (rij.some(x => x.trim() !== "")) rijen.push(rij);
+
+  if (!rijen.length) return [];
+  const kop = rijen[0].map(k => k.trim().toLowerCase());
+  return rijen.slice(1).map(r => {
+    const o = {};
+    kop.forEach((k, i) => o[k] = (r[i] || "").trim());
+    return o;
+  });
+}
+
+/* ============================================================
+   DATUMS EN FILTER
+   ============================================================ */
+function parseDatum(s) {
+  if (!s) return null;
+  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
+  m = s.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/);
+  if (m) return new Date(+m[3], +m[2] - 1, +m[1]);
+  return null;
+}
+
+function isZichtbaar(item) {
+  const actief = (item.actief || "ja").toLowerCase();
+  if (["nee", "no", "false", "0", "n"].includes(actief)) return false;
+
+  const nu = new Date();
+  const start = parseDatum(item.startdatum);
+  const eind  = parseDatum(item.einddatum);
+  if (start && nu < start) return false;
+  if (eind) {
+    eind.setHours(23, 59, 59, 999);   // einddatum geldt de hele dag
+    if (nu > eind) return false;
+  }
+  return !!(item.titel || item.tekst || item.afbeelding);
+}
+
+/* ============================================================
+   DATA OPHALEN (met cache als de verbinding wegvalt)
+   ============================================================ */
+const STATUS = document.getElementById("status");
+
+async function haalOp() {
+  let csv;
+  if (!CONFIG.SHEET_CSV_URL) {
+    csv = DEMO_CSV;
+    STATUS.textContent = "Demo-modus";
+  } else {
+    try {
+      const url = CONFIG.SHEET_CSV_URL +
+        (CONFIG.SHEET_CSV_URL.includes("?") ? "&" : "?") + "t=" + Date.now();
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) throw new Error(res.status);
+      csv = await res.text();
+      try { localStorage.setItem("narrowcasting_csv", csv); } catch (e) {}
+      STATUS.textContent = "Bijgewerkt " + new Date().toLocaleTimeString("nl-NL", {hour: "2-digit", minute: "2-digit"});
+    } catch (e) {
+      try { csv = localStorage.getItem("narrowcasting_csv"); } catch (e2) {}
+      STATUS.textContent = csv ? "Offline – laatst bekende inhoud" : "Geen verbinding";
+    }
+  }
+  return csv ? parseCSV(csv).filter(isZichtbaar) : [];
+}
+
+/* ============================================================
+   SLIDES TONEN
+   ============================================================ */
+const slidesEl = document.getElementById("slides");
+const voortgang = document.getElementById("voortgang");
+const teller = document.getElementById("teller");
+let items = [], elementen = [], huidig = -1, timer = null;
+
+function bouwSlides(lijst) {
+  if (!lijst.length) {
+    lijst = [{ titel: CONFIG.STANDAARD_TITEL, tekst: CONFIG.STANDAARD_TEKST }];
+  }
+  slidesEl.innerHTML = "";
+  elementen = lijst.map(it => {
+    const s = document.createElement("section");
+    s.className = "slide";
+    const heeftTekst = it.titel || it.tekst;
+    if (!it.afbeelding) s.classList.add("alleen-tekst");
+    if (!heeftTekst)    s.classList.add("alleen-afbeelding");
+
+    if (heeftTekst) {
+      const blok = document.createElement("div");
+      blok.className = "tekstblok";
+      if (it.titel) { const h = document.createElement("h1"); h.textContent = it.titel; blok.appendChild(h); }
+      if (it.tekst) { const p = document.createElement("p");  p.textContent = it.tekst; blok.appendChild(p); }
+      s.appendChild(blok);
+    }
+    if (it.afbeelding) {
+      const img = document.createElement("img");
+      img.src = it.afbeelding;
+      img.alt = "";
+      img.onerror = () => img.remove();
+      s.appendChild(img);
+    }
+    slidesEl.appendChild(s);
+    return s;
+  });
+  return lijst;
+}
+
+function toon(i) {
+  elementen.forEach((el, n) => el.classList.toggle("actief", n === i));
+  huidig = i;
+  teller.textContent = (i + 1) + " / " + elementen.length;
+
+  // voortgangsbalk herstarten
+  voortgang.style.transition = "none";
+  voortgang.style.width = "0";
+  void voortgang.offsetWidth;
+  voortgang.style.transition = "width " + CONFIG.SLIDE_SECONDEN + "s linear";
+  voortgang.style.width = "100%";
+}
+
+function volgende() {
+  toon((huidig + 1) % elementen.length);
+}
+
+function startRotatie() {
+  clearInterval(timer);
+  toon(0);
+  if (elementen.length > 1) {
+    timer = setInterval(volgende, CONFIG.SLIDE_SECONDEN * 1000);
+  } else {
+    voortgang.style.transition = "none";
+    voortgang.style.width = "0";
+  }
+}
+
+async function ververs() {
+  const nieuw = await haalOp();
+  const oud = JSON.stringify(items);
+  if (JSON.stringify(nieuw) !== oud || !elementen.length) {
+    items = bouwSlides(nieuw);
+    startRotatie();
+  }
+}
+
+/* ============================================================
+   KLOK EN DATUM
+   ============================================================ */
+function werkKlokBij() {
+  const nu = new Date();
+  document.getElementById("klok").textContent =
+    nu.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" });
+  const d = nu.toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  document.getElementById("datum").textContent = d.charAt(0).toUpperCase() + d.slice(1);
+}
+
+/* ============================================================
+   START
+   ============================================================ */
+werkKlokBij();
+setInterval(werkKlokBij, 1000);
+
+ververs();
+setInterval(ververs, CONFIG.VERVERS_MINUTEN * 60 * 1000);
+
+// Dagelijkse/periodieke volledige herlaad voor stabiliteit
+setTimeout(() => location.reload(), CONFIG.HERLAAD_UUR * 3600 * 1000);
+</script>
+</body>
+</html>
