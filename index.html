@@ -63,6 +63,17 @@
     padding-bottom: 2vh; border-bottom: .8vh solid var(--groen); display: inline-block;
   }
   .slide p  { font-size: 4.6vh; line-height: 1.35; white-space: pre-line; }
+  .slide ul.lijst {
+    list-style: none; text-align: left; display: inline-block;
+    column-gap: 5vw; margin-top: 2vh; font-size: 4.6vh; line-height: 1.5;
+  }
+  .slide ul.lijst.middel { font-size: 4vh; }
+  .slide ul.lijst.klein  { font-size: 3.4vh; }
+  .slide ul.lijst li { break-inside: avoid; padding-left: 3vh; position: relative; }
+  .slide ul.lijst li::before {
+    content: ""; position: absolute; left: 0; top: .62em;
+    width: 1.4vh; height: 1.4vh; border-radius: 50%; background: var(--groen);
+  }
   .slide img {
     flex: 1; min-width: 0; max-width: 48%; max-height: 100%;
     object-fit: contain; border-radius: 1.5vh;
@@ -129,7 +140,9 @@ const CONFIG = {
 };
 
 /* Verwachte kolommen in de sheet (hoofdletters maken niet uit):
-   titel | tekst | afbeelding | startdatum | einddatum | actief
+   titel | tekst | afbeelding | startdatum | einddatum | actief | lijst
+   - lijst: namen of punten gescheiden door puntkomma's (;), bijv.  Jan; Fatima; Pieter
+     Bij meer dan 6 items worden twee kolommen getoond, bij meer dan 12 drie.
    - datums: JJJJ-MM-DD of DD-MM-JJJJ (leeg = altijd)
    - actief: ja / nee (leeg telt als ja)
 */
@@ -137,7 +150,8 @@ const CONFIG = {
 /* ============================================================
    DEMO-INHOUD (wordt getoond zolang SHEET_CSV_URL leeg is)
    ============================================================ */
-const DEMO_CSV = `titel,tekst,afbeelding,startdatum,einddatum,actief
+const DEMO_CSV = `titel,tekst,afbeelding,startdatum,einddatum,actief,lijst
+Jarigen deze week,,,,,ja,Jan de Vries; Fatima Yilmaz; Pieter Bakker; Sanne Visser; Mohammed Ali; Linda Smit; Kees de Boer; Anouk Jansen
 Welkom bij IJsselgrow!,"Fijn dat je er bent.
 Samen zorgen we voor verse komkommers, elke dag opnieuw.",,,,ja
 Veiligheid eerst,"Draag altijd je veiligheidsschoenen in de kas en pakhuis.
@@ -207,7 +221,7 @@ function isZichtbaar(item) {
     eind.setHours(23, 59, 59, 999);   // einddatum geldt de hele dag
     if (nu > eind) return false;
   }
-  return !!(item.titel || item.tekst || item.afbeelding);
+  return !!(item.titel || item.tekst || item.lijst || item.afbeelding);
 }
 
 /* ============================================================
@@ -253,7 +267,8 @@ function bouwSlides(lijst) {
   elementen = lijst.map(it => {
     const s = document.createElement("section");
     s.className = "slide";
-    const heeftTekst = it.titel || it.tekst;
+    const namen = (it.lijst || "").split(/[;|\n]/).map(x => x.trim()).filter(Boolean);
+    const heeftTekst = it.titel || it.tekst || namen.length;
     if (!it.afbeelding) s.classList.add("alleen-tekst");
     if (!heeftTekst)    s.classList.add("alleen-afbeelding");
 
@@ -262,6 +277,13 @@ function bouwSlides(lijst) {
       blok.className = "tekstblok";
       if (it.titel) { const h = document.createElement("h1"); h.textContent = it.titel; blok.appendChild(h); }
       if (it.tekst) { const p = document.createElement("p");  p.textContent = it.tekst; blok.appendChild(p); }
+      if (namen.length) {
+        const ul = document.createElement("ul");
+        ul.className = "lijst" + (namen.length > 12 ? " klein" : namen.length > 6 ? " middel" : "");
+        ul.style.columnCount = namen.length > 12 ? 3 : namen.length > 6 ? 2 : 1;
+        namen.forEach(n => { const li = document.createElement("li"); li.textContent = n; ul.appendChild(li); });
+        blok.appendChild(ul);
+      }
       s.appendChild(blok);
     }
     if (it.afbeelding) {
