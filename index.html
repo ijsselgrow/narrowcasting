@@ -259,6 +259,16 @@ const voortgang = document.getElementById("voortgang");
 const teller = document.getElementById("teller");
 let items = [], elementen = [], huidig = -1, timer = null;
 
+/* Zet gewone Google Drive-deellinks automatisch om naar een bruikbare afbeeldingslink.
+   Ondersteund: drive.google.com/file/d/CODE/view, ...open?id=CODE, ...uc?id=CODE */
+function maakFotoUrl(u) {
+  u = (u || "").trim();
+  const m = u.match(/drive\.google\.com\/file\/d\/([\w-]+)/) ||
+            u.match(/drive\.google\.com\/(?:open|uc|thumbnail)\?(?:[^#]*&)?id=([\w-]+)/);
+  if (m) return "https://drive.google.com/thumbnail?id=" + m[1] + "&sz=w1920";
+  return u;
+}
+
 function bouwSlides(lijst) {
   if (!lijst.length) {
     lijst = [{ titel: CONFIG.STANDAARD_TITEL, tekst: CONFIG.STANDAARD_TEKST }];
@@ -288,7 +298,7 @@ function bouwSlides(lijst) {
     }
     if (it.afbeelding) {
       const img = document.createElement("img");
-      img.src = it.afbeelding;
+      img.src = maakFotoUrl(it.afbeelding);
       img.alt = "";
       img.onerror = () => img.remove();
       s.appendChild(img);
